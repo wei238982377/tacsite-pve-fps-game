@@ -714,3 +714,12 @@ button { -webkit-appearance: none; appearance: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------------------------------------------------------------------------
+   沉浸模式（全屏 + Pointer Lock）
+   --------------------------------------------------------------------------- */
+html, body { overscroll-behavior: none; }
+#game-canvas { touch-action: none; }
+/* 鼠标锁定期间强制隐藏系统光标（Pointer Lock 本身也会隐藏，这里作为兜底） */
+body.pointer-locked,
+body.pointer-locked * { cursor: none !important; }

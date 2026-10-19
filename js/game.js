@@ -548,10 +548,16 @@
     ensureAudio();
     audioCall('ambience', true);
     audioCall('roundStart');
-    showCenterMsg('先到 ' + TARGET_KILLS + ' 杀获胜 · 目标：BOT', 2.6);
+    showCenterMsg('先到 ' + TARGET_KILLS + ' 杀获胜 · F 全屏 / Esc 暂停', 2.6);
     updateHUD();
-    ensureLock();
+    enterImmersive();
     input.fire = false; input.reloadPressed = false; input.scopePressed = false; input.switchTo = null;
+    // 若浏览器因权限/手势原因没有锁上鼠标，提示玩家点击画面重试
+    setTimeout(function () {
+      if (!testMode && state === 'playing' && !isLocked()) {
+        showCenterMsg('点击游戏画面进入全屏并锁定鼠标', 3.0);
+      }
+    }, 800);
     if (testPose) { setTimeout(function () { try { G.Test.poseDuel(8); } catch (e) { /* ignore */ } }, 100); }
   }
 
@@ -599,16 +605,103 @@
     state = 'playing';
     showScreen(null);
     ensureAudio();
-    ensureLock();
+    enterImmersive();
+    setTimeout(function () {
+      if (!testMode && state === 'playing' && !isLocked()) {
+        showCenterMsg('点击游戏画面以锁定鼠标', 2.6);
+      }
+    }, 600);
+  }
+
+  /* ---------------- 沉浸模式：全屏 + 鼠标锁定 ---------------- */
+  function fullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement ||
+      document.msFullscreenElement || document.mozFullScreenElement || null;
+  }
+  function isFullscreen() { return !!fullscreenElement(); }
+
+  function requestPointerLockSafe() {
+    if (document.pointerLockElement === canvas) return true;
+    try {
+      var req = canvas.requestPointerLock || canvas.mozRequestPointerLock || canvas.webkitRequestPointerLock;
+      if (!req) return false;
+      var ret = req.call(canvas);
+      if (ret && typeof ret.catch === 'function') {
+        ret.catch(function () {
+          if (state === 'playing' && !testMode) showCenterMsg('鼠标锁定失败：请点击游戏画面重试', 2.4);
+        });
+      }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function requestFullscreenSafe() {
+    if (isFullscreen()) return true;
+    var root = document.documentElement;
+    var fn = root.requestFullscreen || root.webkitRequestFullscreen || root.msRequestFullscreen;
+    if (!fn) return false;
+    try {
+      var ret = fn.call(root);
+      if (ret && typeof ret.catch === 'function') {
+        ret.catch(function () {
+          if (state === 'playing' && !testMode) showCenterMsg('浏览器拦截了全屏：按 F 或点击画面重试', 2.4);
+        });
+      }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function exitFullscreenSafe() {
+    if (!isFullscreen()) return;
+    var fn = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if (!fn) return;
+    try {
+      var ret = fn.call(document);
+      if (ret && typeof ret.catch === 'function') ret.catch(function () { /* ignore */ });
+    } catch (e) { /* ignore */ }
+  }
+
+  // 进入沉浸模式：锁定鼠标 + 全屏（两个请求都放在同一个用户手势里，浏览器才会允许）
+  function enterImmersive() {
+    if (testMode || freeze) return;
+    requestPointerLockSafe();
+    requestFullscreenSafe();
+    syncImmersiveUi();
+    // 全屏后视口尺寸会变化，稍后同步一次渲染分辨率
+    setTimeout(function () {
+      try { if (G.Engine && G.Engine.resize) G.Engine.resize(); } catch (e) { /* ignore */ }
+    }, 150);
+  }
+
+  // F 键：切换全屏；退出全屏时自动暂停
+  function toggleFullscreen() {
+    if (testMode) return;
+    if (isFullscreen()) {
+      exitFullscreenSafe();
+      if (state === 'playing') pauseGame();
+    } else {
+      if (state === 'playing') requestPointerLockSafe();
+      requestFullscreenSafe();
+      syncImmersiveUi();
+    }
+  }
+
+  function syncImmersiveUi() {
+    if (!document.body) return;
+    document.body.classList.toggle('pointer-locked', isLocked());
+    document.body.classList.toggle('is-fullscreen', isFullscreen());
+  }
+
+  function onFullscreenChange() {
+    syncImmersiveUi();
+    try { if (G.Engine && G.Engine.resize) G.Engine.resize(); } catch (e) { /* ignore */ }
+    if (state === 'playing' && !isFullscreen() && !testMode) pauseGame();
   }
 
   function ensureLock() {
     if (testMode || freeze) return;
     if (state !== 'playing') return;
-    if (document.pointerLockElement === canvas) return;
-    try {
-      if (canvas.requestPointerLock) canvas.requestPointerLock();
-    } catch (e) { /* ignore */ }
+    requestPointerLockSafe();
   }
 
   /* ---------------- 设置 ---------------- */
@@ -662,14 +755,18 @@
         else if (code === 'Digit3') input.switchTo = 'ak47';
         else if (code === 'KeyM' && !e.repeat) { var muted = G.Audio && G.Audio.toggleMute ? G.Audio.toggleMute() : false; showCenterMsg(muted ? '已静音' : '声音已开启', 1.0); }
         else if (code === 'F3' && !e.repeat) { debugVisible = !debugVisible; }
+        else if (code === 'KeyF' && !e.repeat) { toggleFullscreen(); }
         else if (code === 'Escape') { pauseGame(); }
       } else if (state === 'paused') {
         if (code === 'Escape') resumeGame();
+        else if (code === 'KeyF' && !e.repeat) toggleFullscreen();
       } else if (state === 'menu') {
         if (code === 'Enter' || code === 'NumpadEnter') { if (el['menu'] && !el['menu'].classList.contains('hidden')) startMatch(selectedDiff); }
+        else if (code === 'KeyF' && !e.repeat) toggleFullscreen();
         else if (code === 'Escape') { if (el.help && !el.help.classList.contains('hidden')) showScreen('menu'); else if (el.settings && !el.settings.classList.contains('hidden')) showScreen('menu'); }
       } else if (state === 'results') {
         if (code === 'Enter') startMatch(difficulty);
+        else if (code === 'KeyF' && !e.repeat) toggleFullscreen();
         else if (code === 'Escape') showMenu();
       }
       if (code === 'F5') { /* 允许刷新 */ }
@@ -701,27 +798,46 @@
 
     canvas.addEventListener('mousedown', function (e) {
       if (state !== 'playing') return;
-      if (!isLocked() && !testMode) { ensureLock(); return; }
+      // 鼠标未锁定/未全屏时，第一次点击先进入沉浸模式，不误触发射击
+      if (!testMode && (!isLocked() || !isFullscreen())) { enterImmersive(); return; }
       if (e.button === 0) input.fire = true;
       else if (e.button === 2) input.scopePressed = true;
     });
     window.addEventListener('mouseup', function (e) {
       if (e.button === 0) input.fire = false;
     });
-    canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    // 全局禁用浏览器右键菜单（含 HUD、暂停界面等页面其它区域）
+    document.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      return false;
+    }, false);
+    // 鼠标视角：Pointer Lock 下必须使用 movementX / movementY（不能再用 clientX/clientY）
     document.addEventListener('mousemove', function (e) {
       if (!canControl()) return;
       if (!isLocked() && !testMode) return;
-      input.mouseDX += e.movementX || 0;
-      input.mouseDY += e.movementY || 0;
+      var mx = (typeof e.movementX === 'number') ? e.movementX : (typeof e.mozMovementX === 'number' ? e.mozMovementX : 0);
+      var my = (typeof e.movementY === 'number') ? e.movementY : (typeof e.mozMovementY === 'number' ? e.mozMovementY : 0);
+      input.mouseDX += mx;
+      input.mouseDY += my;
     });
-    document.addEventListener('pointerlockchange', function () {
-      if (state === 'playing' && !isLocked() && !testMode) {
-        pauseGame();
+    // 阻止游戏中的滚轮缩放/滚动（触控板双指误触）
+    document.addEventListener('wheel', function (e) {
+      if (state === 'playing' && (isLocked() || testMode)) {
+        if (e.cancelable) e.preventDefault();
       }
+    }, { passive: false });
+    document.addEventListener('pointerlockchange', function () {
+      syncImmersiveUi();
+      if (state === 'playing' && !isLocked() && !testMode) pauseGame();
     });
+    document.addEventListener('pointerlockerror', function () {
+      if (state === 'playing' && !testMode) showCenterMsg('鼠标锁定失败：请点击游戏画面重试', 2.4);
+    });
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    document.addEventListener('MSFullscreenChange', onFullscreenChange);
     canvas.addEventListener('click', function () {
-      if (state === 'playing' && !isLocked()) ensureLock();
+      if (state === 'playing' && (!isLocked() || !isFullscreen()) && !testMode) enterImmersive();
     });
 
     // 主菜单
@@ -750,6 +866,14 @@
 
     // 暂停
     if (el['btn-resume']) el['btn-resume'].addEventListener('click', function () { audioCall('uiClick'); resumeGame(); });
+    // 点击暂停遮罩任意处继续（按钮等交互元素除外）
+    if (el['pause-menu']) el['pause-menu'].addEventListener('click', function (e) {
+      if (state !== 'paused') return;
+      var t = e.target;
+      if (t && t.closest && t.closest('button, input, a, select, textarea')) return;
+      audioCall('uiClick');
+      resumeGame();
+    });
     if (el['btn-restart']) el['btn-restart'].addEventListener('click', function () { audioCall('uiClick'); startMatch(difficulty); });
     if (el['btn-pause-settings']) el['btn-pause-settings'].addEventListener('click', function () { audioCall('uiClick'); settingsReturn = 'pause'; showScreen('settings'); });
     if (el['btn-pause-menu']) el['btn-pause-menu'].addEventListener('click', function () { audioCall('uiClick'); showMenu(); });
@@ -1278,5 +1402,14 @@
     getPlayer: function () { return player; },
     getBot: function () { return bot; },
     isTest: function () { return testMode; }
+  };
+
+  // 暴露沉浸模式控制，方便调试 / 自动化测试
+  G.Immersive = {
+    enter: enterImmersive,
+    exitFullscreen: exitFullscreenSafe,
+    toggle: toggleFullscreen,
+    isFullscreen: isFullscreen,
+    isLocked: isLocked
   };
 })();

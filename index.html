@@ -152,7 +152,7 @@
     </div>
 
     <div id="menu-best">最佳战绩：—</div>
-    <div class="menu-foot">双击 index.html 即玩 · 无需联网 · 建议使用 Edge / Chrome</div>
+    <div class="menu-foot">双击 index.html 即玩 · 开始后自动全屏并锁定鼠标 · Esc 暂停 · 建议 Edge / Chrome</div>
   </div>
 </div>
 
@@ -171,11 +171,18 @@
         <tr><td><span class="key">Shift</span></td><td>静步（更准、更安静）</td></tr>
         <tr><td><span class="key">Ctrl</span></td><td>下蹲（更准、更隐蔽）</td></tr>
         <tr><td><span class="key">Space</span></td><td>跳跃</td></tr>
-        <tr><td><span class="key">Esc</span></td><td>暂停 / 释放鼠标</td></tr>
+        <tr><td><span class="key">F</span></td><td>进入 / 退出全屏（自动锁定鼠标）</td></tr>
+        <tr><td><span class="key">Esc</span></td><td>暂停 / 释放鼠标（点击画面继续）</td></tr>
         <tr><td><span class="key">M</span></td><td>静音</td></tr>
         <tr><td><span class="key">F3</span></td><td>调试信息</td></tr>
       </table>
       <div class="help-tips">
+        <div class="tip-title">沉浸模式</div>
+        <ul>
+          <li><b>自动全屏</b>：开始对战或点击游戏画面时，自动全屏并锁定鼠标、隐藏光标。</li>
+          <li><b>F</b> 切换全屏；<b>Esc</b> 暂停并释放鼠标，点击画面任意处继续。</li>
+          <li>鼠标锁定后，触控板滑动不会再触发浏览器前进/后退，右键菜单也已禁用。</li>
+        </ul>
         <div class="tip-title">对枪要点</div>
         <ul>
           <li><b>站定再开枪</b>：移动中扩散极大，急停（松开方向键的瞬间）最准。</li>
@@ -245,7 +252,7 @@
       <button id="btn-pause-settings" class="btn btn-ghost">设置</button>
       <button id="btn-pause-menu" class="btn btn-ghost">返回主菜单</button>
     </div>
-    <div class="pause-hint">按 Esc 继续 · 鼠标已释放</div>
+    <div class="pause-hint">点击画面任意处继续 · 或按 Esc · 鼠标已释放</div>
   </div>
 </div>
 
@@ -293,6 +300,8 @@
 
 <script>
   window.GAME = window.GAME || {};
+  // 页面加载即禁用浏览器右键菜单（游戏内右键用于 AWM 开镜）
+  document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, false);
   (function () {
     var errBox = null;
     function showFatal(msg) {
