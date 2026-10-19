@@ -14,6 +14,9 @@
   var TARGET_KILLS = 8;
   var RESPAWN_TIME = 3.0;
   var SPAWN_PROTECT = 1.6;
+  // 玩家移速降低后，Bot 移动速度保持原设计值（避免破坏 AI 的搜索/交战节奏与难度平衡）。
+  // 如需让 Bot 也变慢，可把这里改成 0.6 等比例，但建议先实测对枪手感。
+  var BOT_SPEED_SCALE = 1.0;
   var WEAPON_NAMES = { deagle: '沙漠之鹰', awm: 'AWM', ak47: 'AK-47' };
   var STORAGE_KEY = 'aigame_dustduel_v1';
 
@@ -1052,7 +1055,7 @@
     var moved = Math.sqrt(Math.pow(bot.pos[0] - (botLastPos ? 0 : 0), 2));
     // 用速度估算脚步
     var speed = bot.vel ? Math.sqrt(bot.vel[0] * bot.vel[0] + bot.vel[2] * bot.vel[2]) : 0;
-    if (speed > 1.2 && bot.state !== 'dead') {
+    if (speed > 0.3 && bot.state !== 'dead') {
       botFootAccum += speed * dt;
       if (botFootAccum >= 1.9) {
         botFootAccum = 0;
@@ -1098,7 +1101,7 @@
       moveActor: function (actor, dt2, wishDir, speed, opts2) {
         var w = wishDir;
         if (w && w.length === 2) w = [w[0], 0, w[1]];
-        return G.Physics.moveActor(actor, dt2, w, speed, opts2);
+        return G.Physics.moveActor(actor, dt2, w, speed * BOT_SPEED_SCALE, opts2);
       },
       botFire: function (dir, opts) { return botFire(dir, opts); },
       playSound: function (weaponId, pos) {

@@ -9,6 +9,21 @@
 
   var WEAPON_IDS = ['deagle', 'awm', 'ak47'];
 
+  /* ---------------- 移动手感参数（CS 风格：低速 + 惯性） ----------------
+     原版本基础速度 5.7 m/s。现在约 36%（≈2.05 m/s），
+     同时降低加速度、降低摩擦，让起步 / 急停更慢、更有“沉重感”。
+     想整体调快/调慢只需要改这里的 baseSpeed；加速度/摩擦在下方地面移动中生效。 */
+  var MOVE = {
+    baseSpeed: 2.05,          // 原 5.7
+    walkSpeed: 1.15,          // 原 2.7
+    crouchSpeed: 1.25,        // 原 2.9
+    scopedSpeedFactor: 0.42,  // 开镜移动更慢
+    groundAccel: 9.0,         // 原 60：越小起步越“重”
+    airAccel: 5.0,            // 原 18：空中控制更弱
+    friction: 2.6,            // 原 6：越小停得越慢、惯性越明显
+    lookBase: 0.0022          // 鼠标转向基础系数（再乘设置里的灵敏度）
+  };
+
   function makeWeaponState(def) {
     return { ammo: def.mag, reserve: def.reserve };
   }
@@ -212,9 +227,9 @@
     if (def.sprayPattern) {
       patternExtra = def.sprayPattern[Math.min(p.shotCount, def.sprayPattern.length - 1)] * 0.22;
     }
-    addViewKick(p, def, patternExtra);
-    p.shotSpread = Math.min(def.spreadDeg.max, p.shotSpread + def.spreadDeg.perShot);
 
+    // 关键顺序：先按“扣扳机瞬间”的视角生成弹道，再应用本发后坐力。
+    // 这样子弹方向与当前准星/镜头完全一致（AWM 开镜第一发不会因为本发后坐力而抬高）。
     var viewPitch = p.pitch + p.viewRecoilPitch;
     var viewYaw = p.yaw + p.viewRecoilYaw;
     var dir = M.forwardFrom(viewYaw, viewPitch, [0, 0, 0]);
@@ -226,15 +241,22 @@
       air: !p.actor.onGround,
       shotSpread: p.shotSpread
     });
-    // AWM 未开镜时散布惩罚
+    // AWM：完全开镜时散布严格为 0（子弹 100% 落在准星中心，指哪打哪）；
+    // 腰射保留大散布，移动/跳跃时更差。其它武器不允许开镜，不受此分支影响。
     if (def.scope) {
-      var scopedFactor = p.scopeT;
-      if (scopedFactor > 0.85) {
-        spread = def.scopedSpreadDeg + p.shotSpread * 0.15;
+      if (p.scoped && p.scopeT >= 0.98) {
+        spread = 0;
       } else {
-        spread = def.hipSpreadDeg * (1 - scopedFactor) + 8.0 * (1 - scopedFactor) + p.shotSpread;
+        var hipFactor = p.scoped ? Math.max(0, 1 - p.scopeT) : 1;
+        var movePenalty = speed * 3.0 + (p.actor.onGround ? 0 : 6.0);
+        spread = (def.hipSpreadDeg + 8.0) * hipFactor + movePenalty + p.shotSpread;
       }
     }
+    p.lastSpreadDeg = spread;
+
+    // 再应用后坐力与连发扩散（作用于镜头和后续子弹）
+    addViewKick(p, def, patternExtra);
+    p.shotSpread = Math.min(def.spreadDeg.max, p.shotSpread + def.spreadDeg.perShot);
 
     if (def.boltTime > 0) {
       p.boltT = 0.0001;
@@ -309,8 +331,9 @@
     if (!recentFire) p.shotCount = 0;
     p.shotSpread = Math.max(0, p.shotSpread - p.weapon.spreadDeg.recover * dt);
 
-    // 鼠标转向（开镜降低灵敏度）
-    var sens = (input.sens || 1) * 0.0022;
+    // 鼠标转向：灵敏度来自设置面板（settings.sens → input.sens），实时生效
+    var userSens = (typeof input.sens === 'number' && isFinite(input.sens)) ? input.sens : 1.0;
+    var sens = M.clamp(userSens, 0.1, 3.0) * MOVE.lookBase;
     var zoomSens = p.scoped ? 0.42 : 1;
     p.yaw -= (input.mouseDX || 0) * sens * zoomSens;
     p.pitch -= (input.mouseDY || 0) * sens * zoomSens;
@@ -337,12 +360,12 @@
     if (p.scoped) p.scopeT = Math.min(1, p.scopeT + dt / 0.22);
     else p.scopeT = Math.max(0, p.scopeT - dt / 0.16);
 
-    // 移动
-    var speed = 5.7;
-    if (input.walk) speed = 2.7;
-    if (input.crouch) speed = 2.9;
-    if (p.scoped) speed *= 0.36;
-    if (p.actor.crouch > 0.5 && !input.crouch) speed = 2.9;
+    // 移动（CS 风格低速 + 惯性；参数集中在 MOVE）
+    var speed = MOVE.baseSpeed;
+    if (input.walk) speed = MOVE.walkSpeed;
+    if (input.crouch) speed = MOVE.crouchSpeed;
+    if (p.scoped) speed *= MOVE.scopedSpeedFactor;
+    if (p.actor.crouch > 0.5 && !input.crouch) speed = MOVE.crouchSpeed;
     var fwd = 0, strafe = 0;
     if (input.forward) fwd += 1;
     if (input.back) fwd -= 1;
@@ -362,12 +385,16 @@
     world.physics.moveActor(p.actor, dt, wish, speed, {
       jump: wantJump,
       crouch: !!input.crouch,
-      walk: !!input.walk
-    });    p.pos = p.actor.pos;
+      walk: !!input.walk,
+      accel: MOVE.groundAccel,
+      airAccel: MOVE.airAccel,
+      friction: MOVE.friction
+    });
+    p.pos = p.actor.pos;
     p.vel = p.actor.vel;
     var hspeed = Math.sqrt(p.vel[0] * p.vel[0] + p.vel[2] * p.vel[2]);
     p.speed = hspeed;
-    p.moving = hspeed > 0.6;
+    p.moving = hspeed > 0.35;
     p.crouch = p.actor.crouch;
     p.eyeHeight = p.actor.eyeHeight;
 
@@ -381,15 +408,15 @@
     p.viewDip += (0 - p.viewDip) * Math.min(1, dt * 9);
     if (p.viewDip < 0.001) p.viewDip = 0;
 
-    // 走路视角晃动 + 脚步声
-    var bobAmp = p.moving && p.actor.onGround ? (input.walk ? 0.008 : 0.016) : 0;
+    // 走路视角晃动 + 脚步声（低速时步伐更沉、更慢）
+    var bobAmp = p.moving && p.actor.onGround ? (input.walk ? 0.010 : 0.020) : 0;
     if (p.scoped) bobAmp *= 0.25;
-    p.walkPhase += dt * (p.moving ? (input.walk ? 5.2 : 9.0) : 0);
+    p.walkPhase += dt * (p.moving ? (input.walk ? Math.max(3.4, hspeed * 2.8) : Math.max(5.0, hspeed * 3.4)) : 0);
     p.bobX = Math.sin(p.walkPhase) * bobAmp;
     p.bobY = Math.abs(Math.cos(p.walkPhase)) * bobAmp * 1.2;
     if (p.moving && p.actor.onGround) {
       p.footAccum += hspeed * dt;
-      var stride = input.walk ? 1.55 : 1.95;
+      var stride = input.walk ? 1.2 : 1.35;
       if (p.footAccum >= stride) {
         p.footAccum -= stride;
         var surface = 'sand';

@@ -49,11 +49,11 @@
       scope: true,
       zoomFov: 26,
       boltTime: 1.45,
-      scopedSpreadDeg: 0.02,
+      scopedSpreadDeg: 0,       // 0 = 完全开镜时 100% 精准（指哪打哪）
       pellets: 1,
       tracerColor: [0.85, 0.95, 1.0],
       crosshair: 'awm',
-      hipSpreadDeg: 2.4
+      hipSpreadDeg: 3.4         // 腰射散布较大，符合狙击枪特性
     },
     ak47: {
       id: 'ak47',

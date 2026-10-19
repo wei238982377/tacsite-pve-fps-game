@@ -1580,6 +1580,11 @@
     if (dt <= 0) return;
     if (dt > 0.05) dt = 0.05;
     var radius = a.radius || 0.34;
+    // 可选移动手感参数：玩家传 accel/friction/airAccel 实现“重”手感；
+    // Bot 不传时使用旧默认值，保持原有 AI 表现。
+    var friction = (typeof opts.friction === 'number') ? opts.friction : 6.0;
+    var groundAccel = (typeof opts.accel === 'number') ? opts.accel : 60;
+    var airAccel = (typeof opts.airAccel === 'number') ? opts.airAccel : 18;
     var wantCrouch = opts.crouch ? 1 : 0;
     // 平滑下蹲/站起；站起前检查头顶
     var targetCrouch = wantCrouch;
@@ -1599,18 +1604,18 @@
     if (onGround) {
       var sp = Math.sqrt(a.vel[0] * a.vel[0] + a.vel[2] * a.vel[2]);
       if (sp > 0.001) {
-        var drop = Math.max(sp, 4.0) * 6.0 * dt;
+        var drop = Math.max(sp, 4.0) * friction * dt;
         var ns = Math.max(0, sp - drop);
         a.vel[0] *= ns / sp;
         a.vel[2] *= ns / sp;
       }
-      accelerateXZ(a.vel, wx, wz, speed, 60, dt);
+      accelerateXZ(a.vel, wx, wz, speed, groundAccel, dt);
       if (opts.jump) {
         a.vel[1] = 5.9;
         onGround = false;
       }
     } else {
-      accelerateXZ(a.vel, wx, wz, speed * 0.9, 18, dt);
+      accelerateXZ(a.vel, wx, wz, speed * 0.9, airAccel, dt);
     }
     if (!onGround) {
       a.vel[1] -= 20 * dt;
