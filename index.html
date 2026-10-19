@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="color-scheme" content="dark">
+<title>AI GAME · 沙漠对决 — CS2 风格 3D 射击</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+  /* 仅基础骨架；完整视觉由 css/style.css 负责 */
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0b0c0e; }
+  #game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+  .hidden { display: none !important; }
+  .screen { position: fixed; inset: 0; z-index: 40; }
+</style>
+</head>
+<body>
+<canvas id="game-canvas" tabindex="0"></canvas>
+
+<!-- ======================= HUD ======================= -->
+<div id="hud" class="hidden">
+  <div id="damage-vignette"></div>
+  <div id="lowhp-vignette"></div>
+  <div id="spawn-shield"></div>
+
+  <div id="topbar">
+    <div class="score-side score-player-side">
+      <span class="score-label">你</span>
+      <span id="score-player">0</span>
+    </div>
+    <div id="match-info">
+      <div id="match-diff">普通</div>
+      <div id="match-mode">先到 8 杀</div>
+    </div>
+    <div class="score-side score-bot-side">
+      <span id="score-bot">0</span>
+      <span class="score-label">BOT</span>
+    </div>
+  </div>
+
+  <div id="killfeed"></div>
+  <div id="kill-banner"></div>
+  <div id="center-msg"></div>
+
+  <div id="crosshair">
+    <div class="ch-line ch-top"></div>
+    <div class="ch-line ch-bottom"></div>
+    <div class="ch-line ch-left"></div>
+    <div class="ch-line ch-right"></div>
+    <div class="ch-dot"></div>
+  </div>
+  <div id="hitmarker">
+    <div class="hm-line hm-1"></div>
+    <div class="hm-line hm-2"></div>
+    <div class="hm-line hm-3"></div>
+    <div class="hm-line hm-4"></div>
+  </div>
+
+  <div id="damage-dir"><div class="dd-arrow"></div></div>
+
+  <div id="health-panel" class="hud-panel">
+    <div id="health-icon">+</div>
+    <div class="hp-body">
+      <div id="health-number-row">
+        <span id="health-value">100</span>
+        <span class="hp-label">HP</span>
+        <span id="armor-box"><span id="armor-value">0</span><span class="armor-label">AP</span></span>
+      </div>
+      <div id="health-bar"><div id="health-bar-fill"></div></div>
+    </div>
+  </div>
+
+  <div id="ammo-panel" class="hud-panel">
+    <div id="weapon-name">AK-47</div>
+    <div id="ammo-row">
+      <span id="ammo-value">30</span>
+      <span id="ammo-reserve">/ 120</span>
+    </div>
+    <div id="reload-hint">按 R 换弹</div>
+    <div id="reload-bar"><div id="reload-bar-fill"></div></div>
+  </div>
+
+  <div id="weapon-slots">
+    <div class="slot" data-slot="1"><span class="slot-key">1</span><span class="slot-name">沙漠之鹰</span></div>
+    <div class="slot" data-slot="2"><span class="slot-key">2</span><span class="slot-name">AWM</span></div>
+    <div class="slot active" data-slot="3"><span class="slot-key">3</span><span class="slot-name">AK-47</span></div>
+  </div>
+
+  <div id="status-bar">
+    <span id="streak"></span>
+    <span id="fps"></span>
+  </div>
+
+  <div id="debug" class="hidden"></div>
+</div>
+
+<!-- ======================= AWM 开镜 ======================= -->
+<div id="scope-overlay" class="hidden">
+  <div class="scope-vignette"></div>
+  <div class="scope-lens">
+    <div class="scope-glass"></div>
+    <div class="scope-cross-h"></div>
+    <div class="scope-cross-v"></div>
+    <div class="scope-center-dot"></div>
+    <div class="scope-ticks scope-ticks-t"></div>
+    <div class="scope-ticks scope-ticks-b"></div>
+    <div class="scope-ticks scope-ticks-l"></div>
+    <div class="scope-ticks scope-ticks-r"></div>
+  </div>
+</div>
+
+<!-- ======================= 主菜单 ======================= -->
+<div id="menu" class="screen">
+  <div class="menu-bg"></div>
+  <div class="menu-grid"></div>
+  <div class="menu-content">
+    <div class="menu-topline">
+      <span class="tag">AI GAME</span>
+      <span class="tag dim">1 v 1 · 离线单机</span>
+    </div>
+    <h1 id="menu-title">沙漠对决</h1>
+    <div id="menu-sub">DUST DUEL — CS2 风格 3D 射击 · 三把枪 · 一个对手</div>
+
+    <div class="diff-section">
+      <div class="section-label">选择对手难度</div>
+      <div class="diff-cards">
+        <div class="diff-card" data-difficulty="easy">
+          <div class="diff-name">简单</div>
+          <div class="diff-en">RECRUIT</div>
+          <div class="diff-desc">反应慢、枪法飘，适合熟悉地图与枪械</div>
+          <div class="diff-meter"><i style="width:28%"></i></div>
+        </div>
+        <div class="diff-card selected" data-difficulty="normal">
+          <div class="diff-name">普通</div>
+          <div class="diff-en">VETERAN</div>
+          <div class="diff-desc">会走位、会架枪，正常对枪水平</div>
+          <div class="diff-meter"><i style="width:62%"></i></div>
+        </div>
+        <div class="diff-card" data-difficulty="hard">
+          <div class="diff-name">困难</div>
+          <div class="diff-en">EXPERT</div>
+          <div class="diff-desc">预瞄、急停、压枪，爆头率极高</div>
+          <div class="diff-meter"><i style="width:94%"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="menu-actions">
+      <button id="btn-start" class="btn btn-primary">开始对战</button>
+      <button id="btn-help" class="btn btn-ghost">操作说明</button>
+      <button id="btn-settings" class="btn btn-ghost">设置</button>
+    </div>
+
+    <div id="menu-best">最佳战绩：—</div>
+    <div class="menu-foot">双击 index.html 即玩 · 无需联网 · 建议使用 Edge / Chrome</div>
+  </div>
+</div>
+
+<!-- ======================= 操作说明 ======================= -->
+<div id="help" class="screen hidden">
+  <div class="panel panel-wide">
+    <h2 class="panel-title">操作说明</h2>
+    <div class="help-columns">
+      <table class="key-table">
+        <tr><td><span class="key">W A S D</span></td><td>移动</td></tr>
+        <tr><td><span class="key">鼠标</span></td><td>瞄准</td></tr>
+        <tr><td><span class="key">左键</span></td><td>开火</td></tr>
+        <tr><td><span class="key">右键</span></td><td>AWM 开镜 / 退镜</td></tr>
+        <tr><td><span class="key">R</span></td><td>换弹</td></tr>
+        <tr><td><span class="key">1 / 2 / 3</span></td><td>切换武器（沙鹰 / AWM / AK-47）</td></tr>
+        <tr><td><span class="key">Shift</span></td><td>静步（更准、更安静）</td></tr>
+        <tr><td><span class="key">Ctrl</span></td><td>下蹲（更准、更隐蔽）</td></tr>
+        <tr><td><span class="key">Space</span></td><td>跳跃</td></tr>
+        <tr><td><span class="key">Esc</span></td><td>暂停 / 释放鼠标</td></tr>
+        <tr><td><span class="key">M</span></td><td>静音</td></tr>
+        <tr><td><span class="key">F3</span></td><td>调试信息</td></tr>
+      </table>
+      <div class="help-tips">
+        <div class="tip-title">对枪要点</div>
+        <ul>
+          <li><b>站定再开枪</b>：移动中扩散极大，急停（松开方向键的瞬间）最准。</li>
+          <li><b>AK-47</b>：前 4 发精准，之后要向下压枪；点射爆头最稳。</li>
+          <li><b>沙漠之鹰</b>：单发高伤，两枪身体带走，别乱点，瞄准了再打。</li>
+          <li><b>AWM</b>：右键开镜后极准，一枪身体致死；开镜时移动很慢，别在空地上开镜。</li>
+          <li>听脚步和枪声判断对手位置；残血时用箱子、墙角卡视野。</li>
+          <li>先到 8 杀获胜；死亡 3 秒后复活，复活后有短暂无敌。</li>
+        </ul>
+        <div class="tip-title">地图提示</div>
+        <ul>
+          <li>长走廊适合 AWM，中庭适合 AK，房间和拐角适合沙鹰。</li>
+          <li>别一直走同一条路线——对手会架枪。</li>
+        </ul>
+      </div>
+    </div>
+    <button id="btn-help-back" class="btn btn-primary">返回</button>
+  </div>
+</div>
+
+<!-- ======================= 设置 ======================= -->
+<div id="settings" class="screen hidden">
+  <div class="panel">
+    <h2 class="panel-title">设置</h2>
+    <div class="setting-row">
+      <label for="sens">鼠标灵敏度</label>
+      <input id="sens" class="slider" type="range" min="10" max="300" value="90">
+      <span id="sens-value" class="setting-value">1.00</span>
+    </div>
+    <div class="setting-row">
+      <label for="vol">主音量</label>
+      <input id="vol" class="slider" type="range" min="0" max="100" value="70">
+      <span id="vol-value" class="setting-value">70%</span>
+    </div>
+    <div class="setting-row">
+      <label>渲染分辨率</label>
+      <div class="seg" id="scale-options">
+        <button class="seg-btn" data-scale="0.55">0.55×</button>
+        <button class="seg-btn" data-scale="0.7">0.70×</button>
+        <button class="seg-btn" data-scale="0.8">0.80×</button>
+        <button class="seg-btn" data-scale="1">1.00×</button>
+        <button class="seg-btn active" data-scale="auto">自动</button>
+      </div>
+    </div>
+    <div class="setting-row">
+      <label>准星颜色</label>
+      <div class="seg" id="crosshair-options">
+        <button class="seg-btn active" data-color="green">绿</button>
+        <button class="seg-btn" data-color="cyan">青</button>
+        <button class="seg-btn" data-color="yellow">黄</button>
+        <button class="seg-btn" data-color="white">白</button>
+      </div>
+    </div>
+    <div class="setting-hint">灵敏度建议 0.8~1.2；核显笔记本建议渲染分辨率用「自动」。</div>
+    <button id="btn-settings-back" class="btn btn-primary">返回</button>
+  </div>
+</div>
+
+<!-- ======================= 暂停 ======================= -->
+<div id="pause-menu" class="screen hidden">
+  <div class="panel">
+    <h2 class="panel-title">已暂停</h2>
+    <div class="pause-score">比分 <b id="pause-score-player">0</b> : <b id="pause-score-bot">0</b></div>
+    <div class="pause-actions">
+      <button id="btn-resume" class="btn btn-primary">继续游戏</button>
+      <button id="btn-restart" class="btn btn-ghost">重新开始本局</button>
+      <button id="btn-pause-settings" class="btn btn-ghost">设置</button>
+      <button id="btn-pause-menu" class="btn btn-ghost">返回主菜单</button>
+    </div>
+    <div class="pause-hint">按 Esc 继续 · 鼠标已释放</div>
+  </div>
+</div>
+
+<!-- ======================= 结算 ======================= -->
+<div id="results" class="screen hidden">
+  <div class="panel panel-wide">
+    <div id="result-kicker">1 v 1 对决结束</div>
+    <h2 id="result-title">胜利</h2>
+    <div id="result-score">8 : 3</div>
+    <div class="result-grid">
+      <div class="stat"><span class="stat-label">击杀</span><span id="stat-kills">0</span></div>
+      <div class="stat"><span class="stat-label">死亡</span><span id="stat-deaths">0</span></div>
+      <div class="stat"><span class="stat-label">爆头</span><span id="stat-hs">0</span></div>
+      <div class="stat"><span class="stat-label">命中率</span><span id="stat-acc">0%</span></div>
+      <div class="stat"><span class="stat-label">最高连胜</span><span id="stat-best">0</span></div>
+      <div class="stat"><span class="stat-label">难度</span><span id="stat-diff">普通</span></div>
+    </div>
+    <div class="result-actions">
+      <button id="btn-rematch" class="btn btn-primary">再来一局</button>
+      <button id="btn-change-diff" class="btn btn-ghost">更换难度</button>
+      <button id="btn-results-menu" class="btn btn-ghost">返回主菜单</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= 加载 / 错误 ======================= -->
+<div id="loading">
+  <div class="loading-box">
+    <div class="loading-logo">AI GAME</div>
+    <div class="loading-title">沙漠对决</div>
+    <div class="loading-bar"><div id="loading-fill"></div></div>
+    <div id="loading-text">正在生成地图与资源…</div>
+  </div>
+</div>
+
+<div id="fatal-error" class="hidden">
+  <div class="panel">
+    <h2 class="panel-title">出错了</h2>
+    <pre id="fatal-error-text"></pre>
+    <div class="fatal-hint">请确认使用较新的 Edge / Chrome 浏览器打开，并开启硬件加速（WebGL）。</div>
+  </div>
+</div>
+
+<noscript><div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;background:#111;z-index:99">需要启用 JavaScript 才能运行本游戏。</div></noscript>
+
+<script>
+  window.GAME = window.GAME || {};
+  (function () {
+    var errBox = null;
+    function showFatal(msg) {
+      try {
+        var box = document.getElementById('fatal-error');
+        var txt = document.getElementById('fatal-error-text');
+        if (box) { box.classList.remove('hidden'); }
+        if (txt) { txt.textContent = String(msg); }
+        var loading = document.getElementById('loading');
+        if (loading) { loading.classList.add('hidden'); }
+        var hud = document.getElementById('hud');
+        if (hud) { hud.classList.add('hidden'); }
+      } catch (e) { /* ignore */ }
+    }
+    window.GAME.showFatal = showFatal;
+    window.addEventListener('error', function (e) {
+      if (window.__UI_PREVIEW__) return;
+      var msg = 'JavaScript 错误: ' + (e && e.message ? e.message : 'unknown');
+      if (e && e.filename) msg += '\n' + e.filename + ':' + e.lineno;
+      if (e && e.error && e.error.stack) msg += '\n\n' + e.error.stack;
+      window.__GAME_ERROR__ = msg;
+      showFatal(msg);
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      if (window.__UI_PREVIEW__) return;
+      var msg = 'Promise 错误: ' + (e && e.reason ? (e.reason.message || e.reason) : 'unknown');
+      window.__GAME_ERROR__ = msg;
+      showFatal(msg);
+    });
+  })();
+</script>
+
+<!-- UI 预览模式（仅设计/截图用，不影响游戏）：index.html?ui=1&screen=menu|help|settings|pause|results|hud|scope -->
+<script>
+  (function () {
+    var q = null;
+    try { q = new URLSearchParams(window.location.search); } catch (e) { q = null; }
+    if (!q || !q.has('ui')) { return; }
+    window.__UI_PREVIEW__ = true;
+    var target = q.get('screen') || 'menu';
+    var map = { menu: 'menu', help: 'help', settings: 'settings', pause: 'pause-menu', results: 'results', hud: 'hud', scope: 'scope-overlay' };
+    function byId(id) { return document.getElementById(id); }
+    function hideAll() {
+      var ids = ['menu', 'help', 'settings', 'pause-menu', 'results', 'hud', 'scope-overlay', 'loading'];
+      for (var i = 0; i < ids.length; i++) { var el = byId(ids[i]); if (el) el.classList.add('hidden'); }
+    }
+    function fillDemo() {
+      var vals = {
+        'score-player': '5', 'score-bot': '3', 'match-diff': '普通', 'health-value': '74',
+        'ammo-value': '23', 'ammo-reserve': '/ 120', 'streak': '三连杀', 'fps': '59 FPS',
+        'pause-score-player': '5', 'pause-score-bot': '3',
+        'result-score': '8 : 4', 'stat-kills': '8', 'stat-deaths': '4', 'stat-hs': '3',
+        'stat-acc': '31%', 'stat-best': '4', 'stat-diff': '普通'
+      };
+      for (var k in vals) { if (!Object.prototype.hasOwnProperty.call(vals, k)) continue; var el = byId(k); if (el) el.textContent = vals[k]; }
+      var hp = byId('health-bar-fill'); if (hp) hp.style.width = '74%';
+      var ks = byId('killfeed');
+      if (ks && !ks.children.length) {
+        ks.innerHTML = '<div class="kf-row"><span class="kf-killer">你</span><span class="kf-weapon">AK-47</span><span class="kf-victim">BOT</span><span class="kf-hs">爆头</span></div>' +
+                       '<div class="kf-row kf-old"><span class="kf-killer">BOT</span><span class="kf-weapon">AK-47</span><span class="kf-victim">你</span><span class="kf-hs"></span></div>';
+      }
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      hideAll();
+      if (target === 'hud' || target === 'scope') {
+        var hud = byId('hud'); if (hud) hud.classList.remove('hidden');
+        fillDemo();
+        if (target === 'scope') { var sc = byId('scope-overlay'); if (sc) sc.classList.remove('hidden'); }
+      } else {
+        var scr = byId(map[target] || 'menu'); if (scr) scr.classList.remove('hidden');
+        if (target === 'results' || target === 'pause') { fillDemo(); }
+        if (target === 'help' || target === 'settings') { var m = byId('menu'); if (m) m.classList.remove('hidden'); }
+      }
+    });
+  })();
+</script>
+
+<!-- 游戏脚本（顺序固定，禁止修改） -->
+<script src="js/math.js"></script>
+<script src="js/map.js"></script>
+<script src="js/weapons.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/player.js"></script>
+<script src="js/bot.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
