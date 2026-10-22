@@ -1140,9 +1140,8 @@
     var eye = eyeOf(p);
     var yaw = p.yaw + p.viewRecoilYaw;
     var pitch = p.pitch + p.viewRecoilPitch;
-    var fov = 90;
-    var def = p.weapon;
-    if (def && def.scope) fov = M.lerp(90, def.zoomFov, p.scopeT);
+    // 镜头 FOV 由玩家状态平滑维护：AWM 一级镜 52° / 二级镜 26°，关镜回到 90°
+    var fov = (typeof p.scopeFov === 'number') ? p.scopeFov : 90;
     if (!p.alive) {
       var t = Math.min(1, p.deathT / 0.9);
       eye[1] = p.pos[1] + M.lerp(1.65, 0.35, t);
@@ -1328,7 +1327,9 @@
           player: player ? {
             pos: player.pos.slice(), health: player.health, alive: player.alive,
             weaponId: player.weaponId, ammo: player.ammoStates[player.weaponId].ammo,
-            scoped: player.scoped, reloading: player.reloading
+            scoped: player.scoped, scopeLevel: player.scopeLevel || 0,
+            scopeT: player.scopeT || 0, scopeFov: player.scopeFov || 90,
+            reloading: player.reloading
           } : null,
           bot: bot ? {
             pos: bot.pos.slice(), health: bot.health, alive: bot.alive,

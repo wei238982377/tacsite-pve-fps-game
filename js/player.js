@@ -51,7 +51,9 @@
       equipT: 1,
       equipDur: 0,
       scoped: false,
+      scopeLevel: 0,            // 0=腰射，1=一级镜，2=二级镜
       scopeT: 0,
+      scopeFov: 90,             // 当前镜头 FOV（随倍镜等级平滑变化）
       boltT: 0,
       boltDur: 0,
       nextFire: 0,
@@ -71,7 +73,6 @@
       footAccum: 0,
       wasOnGround: false,
       crouch: 0,
-      scopeFov: 90,
       spawnProtection: 0,
       deathT: 0,
       hurtT: 0,
@@ -98,7 +99,9 @@
     p.reloading = false;
     p.reloadT = 0;
     p.scoped = false;
+    p.scopeLevel = 0;
     p.scopeT = 0;
+    p.scopeFov = 90;
     p.boltT = 0;
     p.shotSpread = 0;
     p.shotCount = 0;
@@ -127,7 +130,9 @@
     p.reloading = false;
     p.reloadT = 0;
     p.scoped = false;
+    p.scopeLevel = 0;
     p.scopeT = 0;
+    p.scopeFov = 90;
     p.boltT = 0;
     p.nextFire = 0;
     p.shotSpread = 0;
@@ -286,7 +291,9 @@
       p.deathT = 0;
       p.reloading = false;
       p.scoped = false;
+      p.scopeLevel = 0;
       p.scopeT = 0;
+      p.scopeFov = 90;
       p.events.push({ type: 'death' });
       return { dead: true, applied: dealt };
     }
@@ -334,7 +341,8 @@
     // 鼠标转向：灵敏度来自设置面板（settings.sens → input.sens），实时生效
     var userSens = (typeof input.sens === 'number' && isFinite(input.sens)) ? input.sens : 1.0;
     var sens = M.clamp(userSens, 0.1, 3.0) * MOVE.lookBase;
-    var zoomSens = p.scoped ? 0.42 : 1;
+    // 开镜灵敏度随当前 FOV 变化：一级镜比二级镜更容易拖动，和 CS2 的倍镜手感一致
+    var zoomSens = p.scoped ? M.clamp((p.scopeFov || 90) / 90 * 0.70, 0.16, 0.85) : 1;
     p.yaw -= (input.mouseDX || 0) * sens * zoomSens;
     p.pitch -= (input.mouseDY || 0) * sens * zoomSens;
     p.yaw = M.wrapAngle(p.yaw);
@@ -348,17 +356,39 @@
     }
     // 换弹
     if (input.reloadPressed) startReload(p);
-    // 开镜
+    // 开镜 / 变焦：AWM 右键循环 一级镜 → 二级镜 → 关镜（类似 CS2 的两级倍镜）
     if (input.scopePressed && p.weapon.scope) {
       if (p.boltT <= 0 && p.equipT >= 1) {
-        p.scoped = !p.scoped;
-        p.events.push({ type: p.scoped ? 'scopeIn' : 'scopeOut' });
+        var maxZoom = (p.weapon.zoomFovs && p.weapon.zoomFovs.length) ? p.weapon.zoomFovs.length : 1;
+        if (!p.scoped) {
+          p.scoped = true;
+          p.scopeLevel = 1;
+          p.scopeT = 0;
+          p.events.push({ type: 'scopeIn', level: 1 });
+        } else if (p.scopeLevel < maxZoom) {
+          p.scopeLevel++;
+          p.events.push({ type: 'scopeIn', level: p.scopeLevel });
+        } else {
+          p.scoped = false;
+          p.scopeLevel = 0;
+          p.events.push({ type: 'scopeOut' });
+        }
       }
     } else if (!p.weapon.scope) {
       p.scoped = false;
+      p.scopeLevel = 0;
     }
     if (p.scoped) p.scopeT = Math.min(1, p.scopeT + dt / 0.22);
     else p.scopeT = Math.max(0, p.scopeT - dt / 0.16);
+
+    // 平滑镜头 FOV：开镜两级之间推近/拉远，关镜平滑回到 90
+    var targetScopeFov = 90;
+    if (p.scoped) {
+      var zoomList = p.weapon.zoomFovs || [p.weapon.zoomFov || 26];
+      var zoomIdx = Math.min(Math.max(0, p.scopeLevel - 1), zoomList.length - 1);
+      targetScopeFov = zoomList[zoomIdx] || 90;
+    }
+    p.scopeFov += (targetScopeFov - p.scopeFov) * Math.min(1, dt * 14);
 
     // 移动（CS 风格低速 + 惯性；参数集中在 MOVE）
     var speed = MOVE.baseSpeed;

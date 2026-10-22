@@ -47,7 +47,8 @@
       recoil: { up: 3.6, side: 0.8, kick: 5.0, recover: 5.5 },
       range: 120,
       scope: true,
-      zoomFov: 26,
+      zoomFov: 26,               // 兼容旧字段（二级镜 FOV）
+      zoomFovs: [52, 26],        // 类似 CS2 的两级倍镜：右键一次一级镜，再点二级镜，第三下关镜
       boltTime: 1.45,
       scopedSpreadDeg: 0,       // 0 = 完全开镜时 100% 精准（指哪打哪）
       pellets: 1,
